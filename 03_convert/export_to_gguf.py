@@ -44,18 +44,17 @@ OUT_F32 = Path(os.environ.get(
 
 # Space-separated string, exactly how FUTO reads keyboardlm.features.
 #
-# A plain causal LM only supports base_v1 + inverted_space. The autocorrect /
-# swipe / char-embed-mixing features are NOT extra weights in FUTO — they are
-# behaviors the model learns from correction-format training data (prompts with
-# <XBU>/<XBC>/<XEC>/<XC0>/<CHAR_A..Z>). Declaring them against a model that was
-# not trained that way makes in-word suggestions worse, not better. Enable them
-# once you train with FUTO-style correction samples:
-#   KEYBOARD_FEATURES="base_v1 inverted_space xbu_char_autocorrect_v1 \
-#   xc0_swipe_typing_v1 char_embed_mixing_v1"
+# The autocorrect / swipe / char-embed-mixing features are NOT extra weights in
+# FUTO — they are behaviors the model learns from correction-format training
+# data (prompts with <XBU>/<XBC>/<XEC>/<XC0>/<CHAR_A..Z>). Because the default
+# pipeline (01_data/make_correction_data.py) trains on that data, the full set
+# is declared by default. To export a plain next-word-only model, override:
+#   KEYBOARD_FEATURES="base_v1 inverted_space"
 # NOTE: xbu_char_autocorrect_v1 and xc0_swipe_typing_v1 MUST be declared
 # together with char_embed_mixing_v1 — FUTO only allocates its embedding-mix
 # buffer when that feature is present, and correction decoding reads it.
-DEFAULT_FEATURES = "base_v1 inverted_space"
+DEFAULT_FEATURES = ("base_v1 inverted_space xbu_char_autocorrect_v1 "
+                    "xc0_swipe_typing_v1 char_embed_mixing_v1")
 FUTO_FEATURES = os.environ.get("KEYBOARD_FEATURES", DEFAULT_FEATURES)
 
 # llama.cpp token types (llama_token_type)

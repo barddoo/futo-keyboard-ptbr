@@ -3,6 +3,8 @@
 A privacy-respecting, on-device keyboard language model for Brazilian Portuguese
 (pt-BR), built for [FUTO Keyboard](https://keyboard.futo.tech/).
 
+**Model downloads:** [huggingface.co/barddoo/futo-keyboard-ptbr](https://huggingface.co/barddoo/futo-keyboard-ptbr)
+
 This repo trains a small GPT (decoder-only) language model on a pt-BR corpus,
 exports it to the GGUF format with the exact metadata FUTO Keyboard's loader
 expects, and validates the result so it can be dropped straight into the app as
@@ -39,6 +41,7 @@ that model from scratch in Brazilian Portuguese:
 | Context length    | 256 tokens                                                    |
 | Vocabulary        | 16,000 (SentencePiece BPE, inverted space, byte fallback)     |
 | Tokenizer type    | `sentencepiece` (`keyboardlm.ext_tokenizer_data`)             |
+| Features          | `base_v1 inverted_space xbu_char_autocorrect_v1 xc0_swipe_typing_v1 char_embed_mixing_v1` |
 | Training data     | pt-BR corpora → cleaned sentences → correction/swipe samples  |
 | Final artifact    | `pt_br_keyboard_q6k.gguf` (Q6_K, ~40 MB)                      |
 
@@ -182,7 +185,9 @@ make validate
 ## Installing in FUTO Keyboard
 
 1. Build the model: `make` (or the conversion + validate targets above).
-2. Copy `03_convert/pt_br_keyboard_q6k.gguf` to your device.
+2. Copy `03_convert/pt_br_keyboard_q6k.gguf` to your device — or download it
+   directly from
+   [`huggingface.co/barddoo/futo-keyboard-ptbr`](https://huggingface.co/barddoo/futo-keyboard-ptbr).
 3. In FUTO Keyboard, go to **Settings → Keyboard models → Import** and select
    the `.gguf` file.
 
@@ -197,24 +202,27 @@ Stage behavior is overridable via environment variables:
 | `KEYBOARD_CKPT`              | `02_train/checkpoints/best.pt`       | Checkpoint to export                       |
 | `KEYBOARD_SP_MODEL`          | `01_data/tokenizer/pt_br_keyboard.model` | SentencePiece model to embed           |
 | `KEYBOARD_OUT`               | `03_convert/pt_br_keyboard_f32.gguf` | F32 GGUF output path                       |
-| `KEYBOARD_FEATURES`          | `base_v1 inverted_space`             | Features declared in `keyboardlm.features` |
+| `KEYBOARD_FEATURES`          | `base_v1 inverted_space xbu_char_autocorrect_v1 xc0_swipe_typing_v1 char_embed_mixing_v1` | Features declared in `keyboardlm.features` |
 | `KEYBOARD_TOKENIZER_VOCAB_SIZE` | `16000`                           | Tokenizer vocab size                       |
 | `COMPILE`                    | `1`                                  | Set `0` to disable `torch.compile` (flaky on some ROCm setups) |
 
-### Enabling autocorrect & swipe features
+### Features
 
-The base model ships with `base_v1 inverted_space`. To teach the keyboard's
-autocorrect and swipe behaviors, train with the correction-format data
-(`make_correction_data.py` already generates it) and export with:
-
-```sh
-KEYBOARD_FEATURES="base_v1 inverted_space xbu_char_autocorrect_v1 xc0_swipe_typing_v1 char_embed_mixing_v1" \
-  python3 03_convert/export_to_gguf.py
-```
+The model declares the full feature set FUTO uses — next-word prediction
+(`base_v1`), inverted-space tokenization (`inverted_space`), autocorrect
+(`xbu_char_autocorrect_v1`), and swipe/gesture typing (`xc0_swipe_typing_v1`
++ `char_embed_mixing_v1`) — because the training data
+(`make_correction_data.py`) already contains correction and swipe samples.
 
 `xbu_char_autocorrect_v1` and `xc0_swipe_typing_v1` must be declared together
 with `char_embed_mixing_v1` — FUTO only allocates its embedding-mix buffer when
-that feature is present.
+that feature is present. To export a plain next-word-only model (no autocorrect
+or swipe), override:
+
+```sh
+KEYBOARD_FEATURES="base_v1 inverted_space" \
+  python3 03_convert/export_to_gguf.py
+```
 
 ## Repository layout
 
