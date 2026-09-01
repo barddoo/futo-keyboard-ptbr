@@ -93,24 +93,69 @@ The `Makefile` drives the whole pipeline; each numbered stage owns one step.
 
 ## Getting started
 
-### macOS (Apple Silicon)
+The pipeline is the same on every platform — `make` drives data → train →
+convert → validate — only the PyTorch backend differs. `train.py` auto-detects
+your GPU: NVIDIA CUDA → `cuda`, AMD ROCm → `cuda` (ROCm wheels expose the same
+API), Apple Silicon → `mps`, fallback → `cpu`.
+
+> On Linux/macOS, `torch` from PyPI installs CPU-only wheels by default. To use
+> a GPU you must install the build that matches your hardware first (see below).
+
+### macOS (Apple Silicon, MPS)
 
 ```sh
 make setup        # installs uv, Python deps, verifies MPS, installs cmake
 make              # runs the full pipeline: data → train → convert → validate
 ```
 
-The first `make` run downloads the corpora and trains the model, which takes a
-while. Individual stages can be run directly:
+`setup.sh` installs PyTorch with Metal support, so training runs on the MPS
+GPU. MPS is single-threaded (DataLoader workers are forced to 0) and only
+supports fp32, so this is the slowest path — fine for sanity runs, slow for
+full training.
+
+### NVIDIA GPU (CUDA)
+
+On a Linux box with an NVIDIA GPU:
 
 ```sh
-make 01_data/download.py       # or any of the file targets in the Makefile
+# Python deps with a CUDA-enabled torch build (match cuNNNN to your driver)
+uv venv .venv
+uv pip install -r requirements.txt \
+  --extra-index-url https://download.pytorch.org/whl/cu124
+
+# macOS/laptop: prepare data locally, then copy the repo over and train there
+make 01_data/processed/train.txt 01_data/tokenizer/pt_br_keyboard.model
+
+# train (auto-detects cuda), then finish conversion + validation
+make 03_convert/pt_br_keyboard_q6k.gguf
+make validate
 ```
 
-### Remote training on an AMD GPU
+The CUDA path enables bf16 autocast, `torch.compile`, and 2 DataLoader workers,
+so it is significantly faster than MPS. Any recent PyTorch CUDA wheel
+(cu118/cu121/cu124/...) works — pick the one matching your driver.
 
-Training runs locally by default, but the heavy lifting can be pushed to a
-ROCm box over SSH:
+### AMD GPU (ROCm)
+
+PyTorch-on-ROCm uses the same `cuda` device API, so nothing in the pipeline
+changes. Two ways to run:
+
+**1. Locally on the ROCm box** — copy the project over, then:
+
+```sh
+bash scripts/setup_rocm.sh     # checks ROCm, creates .venv, installs ROCm torch
+source .venv/bin/activate
+python3 01_data/train_tokenizer.py    # tokenizer not synced, regenerate remotely
+python3 01_data/make_correction_data.py
+python3 02_train/train.py
+```
+
+`setup_rocm.sh` sets `ROCM_VER` (default `rocm7.2`) to match your installed
+ROCm — check `rocm-smi --version` and adjust if needed. If `torch.compile` is
+flaky on your ROCm build, set `COMPILE=0`.
+
+**2. Remote from macOS (recommended)** — keep development on your laptop, push
+training to an AMD box over SSH:
 
 ```sh
 cp .envrc.example .envrc       # set AMD_HOST=user@192.168.x.x
@@ -133,13 +178,6 @@ Then finish the pipeline locally:
 make 03_convert/pt_br_keyboard_q6k.gguf
 make validate
 ```
-
-### Custom hardware
-
-- **ROCm**: run `scripts/setup_rocm.sh` on the target machine, or install with
-  `pip install torch --index-url https://download.pytorch.org/whl/rocm7.2`
-  (set `ROCM_VER` to match your ROCm release).
-- **Apple Silicon**: `make setup` handles everything; training uses MPS.
 
 ## Installing in FUTO Keyboard
 
