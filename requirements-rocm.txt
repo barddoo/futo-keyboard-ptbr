@@ -1,0 +1,14 @@
+# Install on the AMD GPU machine (ROCm 6.2 — adjust version to match your ROCm)
+# Check your ROCm version with: rocm-smi --version
+--index-url https://download.pytorch.org/whl/rocm6.2
+torch
+torchvision
+torchaudio
+
+# Same deps as Mac (no index-url needed for these)
+sentencepiece>=0.2.0
+datasets>=2.19.0
+tokenizers>=0.19.0
+gguf>=0.10.0
+numpy>=1.24.0
+tqdm>=4.66.0

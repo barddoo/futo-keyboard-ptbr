@@ -1,0 +1,31 @@
+# --- Personal environment ---
+.envrc
+
+# --- Python ---
+.venv/
+__pycache__/
+*.pyc
+train.log
+
+# --- Downloaded / generated corpora (regenerate with 01_data/download.py) ---
+01_data/raw/
+
+# --- Derived training data (regenerate with make / 01_data/*.py) ---
+01_data/processed/
+01_data/tokenizer/
+
+# --- Model checkpoints (regenerate with 02_train/train.py) ---
+02_train/checkpoints/
+
+# --- GGUF artifacts (regenerate with make; ship via GitHub Releases) ---
+03_convert/*.gguf
+04_inject/*.gguf
+
+# --- Vendor build of llama.cpp (cloned by scripts/quantize.sh) ---
+llama.cpp/
+
+# --- macOS ---
+.DS_Store
+
+# --- Misc ---
+*.log

@@ -1,0 +1,14 @@
+# Core ML
+torch>=2.1.0
+transformers>=4.40.0
+sentencepiece>=0.2.0
+protobuf>=4.25.0
+datasets>=2.19.0
+tokenizers>=0.19.0
+
+# GGUF manipulation
+gguf>=0.10.0
+
+# Data processing
+numpy>=1.24.0
+tqdm>=4.66.0
