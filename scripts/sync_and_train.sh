@@ -14,6 +14,11 @@ fi
 
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
+# Language to train (langs/<code>.py); paths are relative to the project root
+export KEYBOARD_LANG="${KEYBOARD_LANG:-pt}"
+SP_MODEL="$(cd "$PROJECT_DIR" && python3 -m langs sp_model)"
+CORRECTION="$(cd "$PROJECT_DIR" && python3 -m langs processed_dir)/correction_train.txt"
+
 echo "=== Syncing to $AMD_HOST:$REMOTE_DIR ==="
 
 # Sync everything except venv, generated GGUF files, llama.cpp and the raw
@@ -42,17 +47,18 @@ if [ ! -d .venv ]; then
 fi
 
 source .venv/bin/activate
+export KEYBOARD_LANG=$KEYBOARD_LANG
 
 python3 -c "import torch; print('GPU:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'NOT FOUND')"
 
 # Generate the FUTO tokenizer if not present (or if it's stale/missing)
-if [ ! -f 01_data/tokenizer/pt_br_keyboard.model ]; then
+if [ ! -f $SP_MODEL ]; then
   echo "Training tokenizer …"
   python3 01_data/train_tokenizer.py
 fi
 
 # Generate correction/swipe training data if not synced over
-if [ ! -f 01_data/processed/correction_train.txt ]; then
+if [ ! -f $CORRECTION ]; then
   echo "Generating correction training data …"
   python3 01_data/make_correction_data.py
 fi
