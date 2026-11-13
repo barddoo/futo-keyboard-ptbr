@@ -8,6 +8,7 @@ Keyboard LM training differs from general LM:
 """
 import re
 import hashlib
+import random
 import sys
 from pathlib import Path
 from tqdm import tqdm
@@ -25,6 +26,26 @@ VALID_OUT = OUT_DIR / "valid.txt"
 
 VALID_RATIO = 0.005  # 0.5% for validation
 MAX_LINE_LEN = 300   # chars; longer than this rarely appears in mobile typing
+
+# Typographic apostrophe look-alikes → ASCII apostrophe. Phone keyboards type
+# U+0027, and NFKC (the tokenizer's normalisation) leaves all of these alone,
+# so without this "l’ami" and "l'ami" would be different token sequences.
+APOSTROPHES = str.maketrans({
+    "\u2019": "'",  # ’ right single quotation mark (the usual culprit)
+    "\u2018": "'",  # ‘ left single quotation mark
+    "\u02bc": "'",  # ʼ modifier letter apostrophe
+    "\u2032": "'",  # ′ prime
+    "\u00b4": "'",  # ´ acute accent used as apostrophe
+    "\u0060": "'",  # ` grave accent used as apostrophe
+})
+
+
+def normalize(line: str) -> str:
+    """Language-specific character normalisation, applied before anything
+    else. Accents and case are left untouched."""
+    if LANG.normalize_apostrophes:
+        line = line.translate(APOSTROPHES)
+    return line
 
 
 def is_keyboard_like(line: str) -> bool:
@@ -63,9 +84,10 @@ def run() -> None:
 
     for fpath in raw_files:
         print(f"Processing {fpath.name} …")
+        kept_before = len(all_lines)
         with open(fpath, encoding="utf-8") as fin:
             for raw_line in tqdm(fin):
-                for sent in sentence_split(raw_line):
+                for sent in sentence_split(normalize(raw_line)):
                     if not is_keyboard_like(sent):
                         continue
                     fp = fingerprint(sent)
@@ -73,8 +95,14 @@ def run() -> None:
                         continue
                     seen.add(fp)
                     all_lines.append(sent)
+        kept = all_lines[kept_before:]
+        print(f"  kept {len(kept):,} sentences, "
+              f"{sum(map(len, kept)) / 1e6:,.1f}M chars")
 
     print(f"Total unique sentences: {len(all_lines):,}")
+
+    if LANG.shuffle_before_split:
+        random.Random(1337).shuffle(all_lines)
 
     split_idx = int(len(all_lines) * (1 - VALID_RATIO))
     train_lines = all_lines[:split_idx]
