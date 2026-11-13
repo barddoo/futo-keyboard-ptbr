@@ -1,5 +1,5 @@
 """
-Train the SentencePiece tokenizer for pt-BR with FUTO Keyboard's conventions.
+Train the SentencePiece tokenizer for the active language with FUTO Keyboard's conventions.
 
 FUTO's runtime (native/jni/src/ggml/LanguageModel.cpp and the JNI in
 org_futo_inputmethod_latin_xlm_LanguageModel.cpp) makes hard assumptions
@@ -25,18 +25,23 @@ re-tokenized with the final model (dataset.py does this), keeping token ids
 consistent with the model's embedding rows.
 """
 import os
+import sys
 import sentencepiece as spm
 from sentencepiece import sentencepiece_model_pb2 as sp_pb2
 from pathlib import Path
 
-PROCESSED_DIR = Path(__file__).parent / "processed"
-OUT_DIR = Path(os.environ.get("KEYBOARD_TOKENIZER_OUT_DIR", Path(__file__).parent / "tokenizer"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from langs import load as load_lang  # noqa: E402
+
+LANG = load_lang()
+PROCESSED_DIR = LANG.processed_dir
+OUT_DIR = Path(os.environ.get("KEYBOARD_TOKENIZER_OUT_DIR", LANG.tokenizer_dir))
 OUT_DIR.mkdir(exist_ok=True)
 
 TRAIN_FILE = Path(os.environ.get("KEYBOARD_TOKENIZER_INPUT", PROCESSED_DIR / "train.txt"))
-BASE_PREFIX = str(OUT_DIR / "pt_br_keyboard_base")
-MODEL_PATH = OUT_DIR / "pt_br_keyboard.model"
-VOCAB_PATH = OUT_DIR / "pt_br_keyboard.vocab"
+BASE_PREFIX = str(OUT_DIR / f"{LANG.name}_base")
+MODEL_PATH = OUT_DIR / f"{LANG.name}.model"
+VOCAB_PATH = OUT_DIR / f"{LANG.name}.vocab"
 
 VOCAB_SIZE = int(os.environ.get("KEYBOARD_TOKENIZER_VOCAB_SIZE", "16000"))
 # small vocab suits a keyboard LM (fast lookup, less memory)
@@ -96,7 +101,7 @@ def train() -> None:
         bos_id=1,
         eos_id=2,
         unk_id=3,
-        # Normalisation rules suitable for pt-BR
+        # NFKC keeps accented letters and case; fine for Latin-script languages
         normalization_rule_name="nfkc",
         remove_extra_whitespaces=True,
         add_dummy_prefix=True,

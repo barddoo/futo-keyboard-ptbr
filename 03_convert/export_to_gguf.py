@@ -26,21 +26,15 @@ import sentencepiece as spm
 import torch
 from gguf import GGUFWriter
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).parent.parent / "02_train"))
 from model import KeyboardLM, ModelConfig  # noqa: E402
+from langs import load as load_lang  # noqa: E402
 
-CKPT = Path(os.environ.get(
-    "KEYBOARD_CKPT",
-    Path(__file__).parent.parent / "02_train" / "checkpoints" / "best.pt",
-))
-SP_MODEL = Path(os.environ.get(
-    "KEYBOARD_SP_MODEL",
-    Path(__file__).parent.parent / "01_data" / "tokenizer" / "pt_br_keyboard.model",
-))
-OUT_F32 = Path(os.environ.get(
-    "KEYBOARD_OUT",
-    Path(__file__).parent / "pt_br_keyboard_f32.gguf",
-))
+LANG = load_lang()
+CKPT = Path(os.environ.get("KEYBOARD_CKPT", LANG.checkpoint_dir / "best.pt"))
+SP_MODEL = Path(os.environ.get("KEYBOARD_SP_MODEL", LANG.sp_model))
+OUT_F32 = Path(os.environ.get("KEYBOARD_OUT", LANG.f32_gguf))
 
 # Space-separated string, exactly how FUTO reads keyboardlm.features.
 #
@@ -101,9 +95,9 @@ def export(ckpt_path: Path = CKPT, out_path: Path = OUT_F32) -> None:
     writer = GGUFWriter(str(out_path), arch="llama")
 
     # ---- General metadata ----
-    writer.add_name("KeyboardLM-pt-BR")
+    writer.add_name(LANG.gguf_name)
     writer.add_author("pt-br-futo")
-    writer.add_description("pt-BR keyboard language model (FUTO Keyboard)")
+    writer.add_description(LANG.gguf_description)
     writer.add_license("See model creator")
     writer.add_url("https://keyboard.futo.tech/")
 
@@ -128,7 +122,7 @@ def export(ckpt_path: Path = CKPT, out_path: Path = OUT_F32) -> None:
     writer.add_uint32("tokenizer.ggml.eos_token_id", 2)
 
     # ---- FUTO Keyboard metadata (ModelMeta.cpp) ----
-    writer.add_string("keyboardlm.languages", "pt")
+    writer.add_string("keyboardlm.languages", LANG.code)
     writer.add_uint32("keyboardlm.finetuning_count", 0)
     writer.add_string(
         "keyboardlm.history", f"{datetime.date.today()}: Model created")
@@ -165,7 +159,7 @@ def export(ckpt_path: Path = CKPT, out_path: Path = OUT_F32) -> None:
     print(f"F32 GGUF written to {out_path} ({n_vocab} vocab, "
           f"{cfg.n_layer} layers, {cfg.n_embd} embd)")
     print("Next: quantize with llama.cpp")
-    print(f"  ./llama.cpp/quantize {out_path} pt_br_keyboard_q6k.gguf Q6_K")
+    print(f"  ./llama.cpp/quantize {out_path} {LANG.q6k_gguf.name} Q6_K")
 
 
 if __name__ == "__main__":

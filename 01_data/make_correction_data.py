@@ -1,5 +1,5 @@
 """
-Generate FUTO correction-format training data for pt-BR.
+Generate FUTO correction-format training data for the active language.
 
 Faithful Python port of FUTO's TrainingDataGenerator.kt
 (java/src/org/futo/inputmethod/latin/xlm/TrainingDataGenerator.kt) plus the
@@ -26,7 +26,11 @@ import random
 import sys
 from pathlib import Path
 
-PROCESSED_DIR = Path(__file__).parent / "processed"
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from langs import load as load_lang  # noqa: E402
+
+LANG = load_lang()
+PROCESSED_DIR = LANG.processed_dir
 PLAIN_FILE = PROCESSED_DIR / "train.txt"
 OUT_FILE = PROCESSED_DIR / "correction_train.txt"
 

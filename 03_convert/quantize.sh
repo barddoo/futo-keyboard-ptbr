@@ -7,8 +7,12 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
-F32_GGUF="$SCRIPT_DIR/pt_br_keyboard_f32.gguf"
-Q6K_GGUF="$SCRIPT_DIR/pt_br_keyboard_q6k.gguf"
+# Artifact names come from the active language config (KEYBOARD_LANG, default pt)
+NAME="$(cd "$PROJECT_DIR" && python3 -m langs name)"
+F32_NAME="${NAME}_f32.gguf"
+Q6K_NAME="${NAME}_q6k.gguf"
+F32_GGUF="$SCRIPT_DIR/$F32_NAME"
+Q6K_GGUF="$SCRIPT_DIR/$Q6K_NAME"
 LLAMACPP_DIR="$PROJECT_DIR/llama.cpp"
 
 # Clone llama.cpp if not present
@@ -37,7 +41,7 @@ echo "Quantizing to Q6_K …"
 # from ever being misread as an integer.
 cd "$SCRIPT_DIR"
 "$LLAMACPP_DIR/build/bin/llama-quantize" \
-  "./pt_br_keyboard_f32.gguf" "./pt_br_keyboard_q6k.gguf" Q6_K
+  "./$F32_NAME" "./$Q6K_NAME" Q6_K
 
 echo "Done: $Q6K_GGUF"
 ls -lh "$Q6K_GGUF"

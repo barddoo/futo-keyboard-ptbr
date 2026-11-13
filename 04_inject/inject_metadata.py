@@ -15,10 +15,11 @@ from pathlib import Path
 
 from gguf import GGUFReader, GGUFValueType
 
-MODEL = Path(os.environ.get(
-    "KEYBOARD_MODEL",
-    Path(__file__).parent.parent / "03_convert" / "pt_br_keyboard_q6k.gguf",
-))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from langs import load as load_lang  # noqa: E402
+
+LANG = load_lang()
+MODEL = Path(os.environ.get("KEYBOARD_MODEL", LANG.q6k_gguf))
 
 REQUIRED_KV = {
     "general.architecture": GGUFValueType.STRING,
@@ -93,6 +94,15 @@ def main() -> int:
         errors.append(f"keyboardlm.features is {f.types[0].name}, "
                       "must be a space-separated STRING")
 
+    # keyboardlm.languages must name the language this build is for (FUTO
+    # matches it against the active keyboard locale)
+    f = r.fields.get("keyboardlm.languages")
+    if f is not None and f.types[0] == GGUFValueType.STRING:
+        langs = val_str(f).split()
+        if LANG.code not in langs:
+            errors.append(f"keyboardlm.languages is {val_str(f)!r}, "
+                          f"expected {LANG.code!r} (KEYBOARD_LANG)")
+
     # tokenizer arrays consistent length
     n_vocab = None
     for key in ("tokenizer.ggml.tokens", "tokenizer.ggml.scores",
@@ -162,6 +172,7 @@ def main() -> int:
 
     print(f"OK: {MODEL} is a valid FUTO keyboard model "
           f"(vocab={n_vocab}, blocks={n_blocks})")
+    print(f"    languages: {val_str(r.fields['keyboardlm.languages'])}")
     print(f"    features: {val_str(r.fields['keyboardlm.features'])}")
     return 0
 

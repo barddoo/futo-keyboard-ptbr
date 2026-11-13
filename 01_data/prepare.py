@@ -8,12 +8,17 @@ Keyboard LM training differs from general LM:
 """
 import re
 import hashlib
+import sys
 from pathlib import Path
 from tqdm import tqdm
 
-RAW_DIR = Path(__file__).parent / "raw"
-OUT_DIR = Path(__file__).parent / "processed"
-OUT_DIR.mkdir(exist_ok=True)
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from langs import load as load_lang  # noqa: E402
+
+LANG = load_lang()
+RAW_DIR = LANG.raw_dir
+OUT_DIR = LANG.processed_dir
+OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 TRAIN_OUT = OUT_DIR / "train.txt"
 VALID_OUT = OUT_DIR / "valid.txt"
@@ -28,7 +33,7 @@ def is_keyboard_like(line: str) -> bool:
     punct_ratio = sum(1 for c in line if not c.isalpha() and not c.isspace()) / max(len(line), 1)
     if punct_ratio > 0.25:
         return False
-    # Non-latin scripts (should be mostly pt-BR)
+    # Non-latin scripts (should be mostly the target language)
     non_latin = sum(1 for c in line if c.isalpha() and ord(c) > 0x024F)
     if non_latin / max(len(line), 1) > 0.05:
         return False
