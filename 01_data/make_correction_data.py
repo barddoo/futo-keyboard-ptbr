@@ -20,10 +20,19 @@ Consumed by 02_train/train.py via the final SentencePiece tokenizer (the
 <XBU>/<XBC>/<XEC>/<XC0>/<CHAR_*> tokens are in the vocab). The model learns
 that after <XBU><CHAR_...><XBC> it must emit the correct word + trailing
 space, and after <XC0> the same for a gesture-decoded string.
+
+Language-specific behaviour comes from langs/<KEYBOARD_LANG>.py:
+  - layout: which key positions simulate tap noise (QWERTY or AZERTY);
+  - fold_accents: the vocabulary only has <CHAR_A>..<CHAR_Z>, so the *typed*
+    side of a sample cannot carry accents. With fold_accents, accented words
+    are eligible for misspelling and are typed with base letters, as a user
+    does on a phone ("ete" → "été", "francais" → "français", "coeur" →
+    "cœur"); the corrected word keeps its accents.
 """
 import math
 import random
 import sys
+import unicodedata
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -56,8 +65,39 @@ QWERTY = {
     "v": (718.0, 515.0), "b": (860.0, 515.0), "n": (1003.0, 515.0),
     "m": (1145.0, 515.0),
 }
+# ---- AZERTY key positions (same grid as above; FUTO's French layout) ----
+#   a z e r t y u i o p
+#   q s d f g h j k l m      (10 keys: no half-key offset on the home row)
+#     w x c v b n '
+_ROW1_X = [QWERTY[c][0] for c in "qwertyuiop"]
+_ROW3_X = [QWERTY[c][0] for c in "zxcvbn"]
+AZERTY = {
+    **{c: (x, 106.0) for c, x in zip("azertyuiop", _ROW1_X)},
+    **{c: (x, 312.0) for c, x in zip("qsdfghjklm", _ROW1_X)},
+    **{c: (x, 515.0) for c, x in zip("wxcvbn", _ROW3_X)},
+}
+LAYOUTS = {"qwerty": QWERTY, "azerty": AZERTY}
+KEYS = LAYOUTS[LANG.layout]
+assert set(KEYS) == set(LETTERS), f"layout {LANG.layout} must cover a-z"
+
 TAP_SIZE = (80.0, 80.0)
 PERMITTED = set("abcdefghijklmnopqrstuvwxyz'-")
+
+# Ligatures have no canonical decomposition; everything else (é è ê ë à â ç
+# î ï ô ù û ü ÿ …) folds via NFD + dropping the combining marks.
+_LIGATURES = str.maketrans({"œ": "oe", "æ": "ae"})
+
+
+def fold_accents(word: str) -> str:
+    """été → ete, français → francais, cœur → coeur (expects lowercase)."""
+    decomposed = unicodedata.normalize("NFD", word.translate(_LIGATURES))
+    return "".join(c for c in decomposed if not unicodedata.combining(c))
+
+
+def typed_form(word: str) -> str:
+    """Lowercase letters the user would hit for word, before any typo."""
+    w = word.strip().lower()
+    return fold_accents(w) if LANG.fold_accents else w
 
 
 def _normal(mean: float, std: float) -> float:
@@ -65,14 +105,14 @@ def _normal(mean: float, std: float) -> float:
 
 
 def _closest_key(x: float, y: float) -> str:
-    return min(QWERTY, key=lambda c: (QWERTY[c][0] - x) ** 2 + (QWERTY[c][1] - y) ** 2)
+    return min(KEYS, key=lambda c: (KEYS[c][0] - x) ** 2 + (KEYS[c][1] - y) ** 2)
 
 
 def substitute_keyboard_letters(word: str, temperature: float = 0.6) -> str:
     """Add Gaussian tap noise around each key and snap to the closest key."""
     out = []
     for ch in word:
-        pos = QWERTY.get(ch)
+        pos = KEYS.get(ch)
         if pos is None:
             out.append(ch)
             continue
@@ -86,7 +126,7 @@ def substitute_keyboard_letters(word: str, temperature: float = 0.6) -> str:
 
 def misspell_word(word: str, correctness: float = 0.8) -> str:
     """Simulate a realistic mistyping of word (FUTO WordMisspelling port)."""
-    w = word.strip().lower().replace("'", "")
+    w = typed_form(word).replace("'", "")
 
     def rnd() -> float:
         return random.random() ** correctness
@@ -146,7 +186,7 @@ def randomly_misspell_words(text: str, proportion: float = 0.333,
     attempts = 0
     while len(targets) < n and attempts < n * 10:
         i = random.randrange(len(words))
-        if i not in targets and all(c in PERMITTED for c in words[i].lower()):
+        if i not in targets and all(c in PERMITTED for c in typed_form(words[i])):
             targets.add(i)
         attempts += 1
     for i in targets:
