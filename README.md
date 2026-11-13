@@ -30,6 +30,46 @@ that model from scratch in Brazilian Portuguese:
 - **Validated GGUF**: a post-quantization checker verifies every key, tensor,
   and vocab invariant FUTO's loader depends on before you ship it.
 
+## Languages
+
+The pipeline is language-agnostic; each language is one config file in
+`langs/` (corpus sources, artifact names, `keyboardlm.languages` code, GGUF
+name/description, key layout for simulated typos). Pick one with
+`KEYBOARD_LANG` (default `pt`, so plain `make` builds the pt-BR model exactly
+as before):
+
+```sh
+make                      # pt-BR  → 03_convert/pt_br_keyboard_q6k.gguf
+make KEYBOARD_LANG=fr     # French → 03_convert/fr_keyboard_q6k.gguf
+```
+
+| `KEYBOARD_LANG` | Config        | Corpus                                                                 | Typo layout | Artifact                  |
+| --------------- | ------------- | ---------------------------------------------------------------------- | ----------- | ------------------------- |
+| `pt` (default)  | `langs/pt.py` | curated pt-BR, Wikipedia pt, conversational/instruct                   | QWERTY      | `pt_br_keyboard_q6k.gguf` |
+| `fr`            | `langs/fr.py` | OpenSubtitles ~50 %, FineWeb-2 forums/comments ~35 %, Claire dialogues ~10 %, Wikipedia 5 % | AZERTY | `fr_keyboard_q6k.gguf` |
+
+pt keeps the original flat directories (`01_data/raw`, `01_data/processed`,
+`02_train/checkpoints`); other languages use a sub-directory
+(`01_data/raw/fr`, …), so several languages can live side by side.
+
+French specifics:
+
+- "Messaging" register: mostly subtitles, forum/comment text and transcribed
+  conversations, with Wikipedia capped at 5 %.
+- `prepare.py` maps typographic apostrophes (`’` → `'`) before anything else —
+  NFKC does not, and French has one every few words (`j'ai`, `l'ami`).
+- `make_correction_data.py` simulates typos on an AZERTY layout and types
+  accented words with base letters (`ete` → `été`, `francais` → `français`),
+  because only `<CHAR_A..Z>` exist in the vocabulary.
+- `OpenLLM-France/Claire-Dialogue-French-0.1` is gated (accept its terms on
+  the Hub, then `hf auth login`) and CC BY-NC-SA 4.0. Without access the
+  download logs an error for that source and continues with the others.
+
+To add a language, copy `langs/fr.py` to `langs/<code>.py` and adjust it.
+`KEYBOARD_DOWNLOAD_SCALE=0.002 KEYBOARD_BATCH_SIZE=8 KEYBOARD_MAX_STEPS=300 COMPILE=0 make KEYBOARD_LANG=fr`
+runs the whole pipeline on a tiny corpus as a smoke test (a few minutes on
+Apple Silicon).
+
 ## Model specs
 
 | Property          | Value                                                         |
@@ -197,6 +237,8 @@ Stage behavior is overridable via environment variables:
 
 | Variable                     | Default                              | Purpose                                    |
 | ---------------------------- | ------------------------------------ | ------------------------------------------ |
+| `KEYBOARD_LANG`              | `pt`                                 | Language config to build (`langs/<code>.py`); the defaults below follow it |
+| `KEYBOARD_DOWNLOAD_SCALE`    | `1`                                  | Scales every source's download budget (e.g. `0.001` for a smoke test) |
 | `AMD_HOST`                   | *(unset)*                            | SSH target for `make train-remote`         |
 | `KEYBOARD_MODEL`             | `03_convert/pt_br_keyboard_q6k.gguf` | GGUF to validate                           |
 | `KEYBOARD_CKPT`              | `02_train/checkpoints/best.pt`       | Checkpoint to export                       |
@@ -204,6 +246,8 @@ Stage behavior is overridable via environment variables:
 | `KEYBOARD_OUT`               | `03_convert/pt_br_keyboard_f32.gguf` | F32 GGUF output path                       |
 | `KEYBOARD_FEATURES`          | `base_v1 inverted_space xbu_char_autocorrect_v1 xc0_swipe_typing_v1 char_embed_mixing_v1` | Features declared in `keyboardlm.features` |
 | `KEYBOARD_TOKENIZER_VOCAB_SIZE` | `16000`                           | Tokenizer vocab size                       |
+| `KEYBOARD_BATCH_SIZE`        | `64`                                 | Training batch size (lower it on small-memory machines) |
+| `KEYBOARD_MAX_STEPS`         | `0` (no limit)                       | Stop training after N steps (smoke tests)  |
 | `COMPILE`                    | `1`                                  | Set `0` to disable `torch.compile` (flaky on some ROCm setups) |
 
 ### Features
@@ -228,6 +272,7 @@ KEYBOARD_FEATURES="base_v1 inverted_space" \
 
 ```
 Makefile                      pipeline driver (data → train → convert → validate)
+langs/                        per-language configs (pt, fr)
 scripts/                      environment setup + remote training helper
 01_data/                      corpus + tokenizer + correction data
 02_train/                     model, dataset, training loop
@@ -238,5 +283,16 @@ scripts/                      environment setup + remote training helper
 ## License
 
 Model weights and code are provided as-is. The corpora used are each subject
-to their own licenses (Wikipedia, MADRAS1 corpus-ptbr, Pt-Corpus-Instruct) —
-review them before redistributing the training data or derived models.
+to their own licenses (pt: Wikipedia, MADRAS1 corpus-ptbr, Pt-Corpus-Instruct;
+fr: OpenSubtitles, FineWeb-2, Claire-Dialogue-French [CC BY-NC-SA 4.0],
+Wikipedia) — review them before redistributing the training data or derived models.
+
+The French configuration uses the Claire French Dialogue Dataset (CFDD). When
+using it, please cite:
+
+> Julie Hunter, Jérôme Louradour, Virgile Rennard, Ismaïl Harrando, Guokan
+> Shang, Jean-Pierre Lorré (2023).
+> [The Claire French Dialogue Dataset](https://arxiv.org/abs/2311.16840).
+
+The dataset card also asks to cite each original sub-corpus; see
+[OpenLLM-France/Claire-Dialogue-French-0.1](https://huggingface.co/datasets/OpenLLM-France/Claire-Dialogue-French-0.1).
