@@ -60,6 +60,15 @@ TRAIN_CONFIG = dict(
     bf16=True,            # RDNA3 has fast bf16; ~2x throughput vs fp32
 )
 
+# Overrides for smoke tests / small-memory machines (e.g. Apple Silicon, where
+# the default batch needs far more unified memory than a laptop has):
+#   KEYBOARD_BATCH_SIZE=8 KEYBOARD_MAX_STEPS=300 python3 02_train/train.py
+if os.environ.get("KEYBOARD_BATCH_SIZE"):
+    TRAIN_CONFIG["batch_size"] = int(os.environ["KEYBOARD_BATCH_SIZE"])
+# 0 = no limit; otherwise stop after this many optimizer steps (validation
+# and best.pt are still written).
+MAX_STEPS = int(os.environ.get("KEYBOARD_MAX_STEPS", "0"))
+
 # ~42M params, same scale as the official FUTO ml4 model (512 embd, 8 layers).
 MODEL_CONFIG = ModelConfig(
     vocab_size=16_000,
@@ -141,6 +150,8 @@ def train(args) -> None:
     )
 
     total_steps = len(train_loader) * TRAIN_CONFIG["epochs"]
+    if MAX_STEPS:
+        total_steps = min(total_steps, MAX_STEPS)
     step = 0
     best_val_loss = float("inf")
 
@@ -181,6 +192,9 @@ def train(args) -> None:
                             "config": MODEL_CONFIG, "optimizer": optimizer.state_dict()}, ckpt)
                 print(f"[checkpoint] {ckpt}")
 
+            if MAX_STEPS and step >= MAX_STEPS:
+                break
+
         # Validation
         model.eval()
         val_loss = 0.0
@@ -200,6 +214,10 @@ def train(args) -> None:
             torch.save({"step": step, "model": model.state_dict(),
                         "config": MODEL_CONFIG}, best_ckpt)
             print(f"[best] val_loss={best_val_loss:.4f} → {best_ckpt}")
+
+        if MAX_STEPS and step >= MAX_STEPS:
+            print(f"Reached KEYBOARD_MAX_STEPS={MAX_STEPS}, stopping.")
+            break
 
     print("Training complete.")
 
